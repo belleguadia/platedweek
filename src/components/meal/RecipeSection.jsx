@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
-import { saveRecipe } from '../../lib/api'
+import { formatSaveRecipeError, saveRecipe } from '../../lib/api'
 import {
   emptyIngredientForm,
   INGREDIENT_UNITS,
@@ -57,6 +57,16 @@ export default function RecipeSection({ meal, recipe, onSaved }) {
     setSaving(true)
     setMessage('')
 
+    const missingNames = ingredients.some(
+      (item) => (item.amount.trim() || item.unit !== 'whole') && !item.name.trim(),
+    )
+
+    if (missingNames) {
+      setMessage('Each ingredient needs a name in the right-hand field.')
+      setSaving(false)
+      return
+    }
+
     try {
       const serializedIngredients = ingredients
         .filter((item) => item.name.trim())
@@ -69,10 +79,15 @@ export default function RecipeSection({ meal, recipe, onSaved }) {
         category,
       })
       onSaved(saved)
-      setMessage('Recipe saved')
+      const count = saved?.ingredients?.length ?? 0
+      setMessage(
+        count > 0
+          ? `Recipe saved with ${count} ingredient${count === 1 ? '' : 's'}`
+          : 'Recipe saved (add ingredient names to include them)',
+      )
     } catch (error) {
-      console.error(error)
-      setMessage('Could not save recipe')
+      console.error('Recipe save failed:', error)
+      setMessage(formatSaveRecipeError(error))
     } finally {
       setSaving(false)
     }
@@ -137,7 +152,7 @@ export default function RecipeSection({ meal, recipe, onSaved }) {
                   type="text"
                   value={item.name}
                   onChange={(event) => updateIngredient(index, 'name', event.target.value)}
-                  placeholder="Ingredient name"
+                  placeholder="Name"
                   className="ingredient-input min-w-0 flex-1"
                 />
                 <button
@@ -175,7 +190,15 @@ export default function RecipeSection({ meal, recipe, onSaved }) {
           <button type="submit" disabled={saving} className="btn-outline">
             {saving ? 'Saving…' : 'Save recipe'}
           </button>
-          {message && <span className="text-xs text-muted">{message}</span>}
+          {message && (
+            <span
+              className={`text-xs ${
+                message.startsWith('Recipe saved') ? 'text-muted' : 'text-danger'
+              }`}
+            >
+              {message}
+            </span>
+          )}
         </div>
       </form>
     </section>

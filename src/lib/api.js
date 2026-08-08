@@ -83,30 +83,48 @@ export async function createMeal({ mealDate, mealType, title }) {
   return data
 }
 
-export async function getRecipeForMeal(mealId) {
+export async function getIngredientsForRecipe(recipeId) {
   const { data, error } = await db()
+    .from('ingredients')
+    .select('*')
+    .eq('recipe_id', recipeId)
+    .order('created_at', { ascending: true })
+
+  if (error) throw error
+  return data ?? []
+}
+
+export async function getRecipeForMeal(mealId) {
+  const { data: recipe, error } = await db()
     .from('recipes')
-    .select('*, ingredients (*)')
+    .select('*')
     .eq('meal_id', mealId)
+    .order('created_at', { ascending: true })
+    .limit(1)
     .maybeSingle()
 
   if (error) throw error
-  return data
+  if (!recipe) return null
+
+  const ingredients = await getIngredientsForRecipe(recipe.id)
+  return { ...recipe, ingredients }
 }
 
 export async function getRecipeById(recipeId) {
-  const { data, error } = await db()
+  const { data: recipe, error } = await db()
     .from('recipes')
     .select(`
       *,
-      ingredients (*),
       meals ( id, title, meal_date, meal_type )
     `)
     .eq('id', recipeId)
     .maybeSingle()
 
   if (error) throw error
-  return data
+  if (!recipe) return null
+
+  const ingredients = await getIngredientsForRecipe(recipe.id)
+  return { ...recipe, ingredients }
 }
 
 export async function getAllRecipes() {
@@ -128,25 +146,54 @@ export async function getAllRecipes() {
   return data ?? []
 }
 
+export function formatSaveRecipeError(error) {
+  const message = error?.message ?? ''
+
+  if (message.includes('category')) {
+    return 'Database needs an update. In Supabase SQL editor, run the contents of supabase/migration.sql.'
+  }
+
+  if (message.includes('row-level security') || error?.code === '42501') {
+    return 'Permission denied. Sign out, sign back in, and try again.'
+  }
+
+  if (message.includes('multiple (or no) rows')) {
+    return 'Recipe data conflict. Refresh the page and try again.'
+  }
+
+  return message || 'Could not save recipe'
+}
+
 export async function saveRecipe(mealId, { title, instructions, ingredients, category }) {
-  const existing = await getRecipeForMeal(mealId)
+  await requireUser()
+
+  const recipePayload = {
+    title: title?.trim() ?? '',
+    instructions: instructions?.trim() || null,
+    category: category || 'food',
+  }
+
+  const { data: existing, error: existingError } = await db()
+    .from('recipes')
+    .select('id')
+    .eq('meal_id', mealId)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  if (existingError) throw existingError
+
   let recipeId = existing?.id
 
   if (recipeId) {
-    const { error } = await db()
-      .from('recipes')
-      .update({ title, instructions, category: category || 'food' })
-      .eq('id', recipeId)
-
+    const { error } = await db().from('recipes').update(recipePayload).eq('id', recipeId)
     if (error) throw error
   } else {
     const { data, error } = await db()
       .from('recipes')
       .insert({
         meal_id: mealId,
-        title,
-        instructions,
-        category: category || 'food',
+        ...recipePayload,
       })
       .select()
       .single()
@@ -249,12 +296,33 @@ export async function deleteGroceryItem(id) {
   if (error) throw error
 }
 
-export async function pullIngredientsToGrocery(mealId, ingredients) {
+export async function pullIngredientsToGrocery(mealId) {
+  const recipe = await getRecipeForMeal(mealId)
   const existing = await getGroceryItems(mealId)
+
+  if (!recipe) {
+    return {
+      items: existing,
+      addedCount: 0,
+      message: 'No saved recipe found. Save your recipe first, then try again.',
+    }
+  }
+
+  const ingredients = recipe.ingredients ?? []
+
+  if (ingredients.length === 0) {
+    return {
+      items: existing,
+      addedCount: 0,
+      message:
+        'No ingredients found on your saved recipe. Fill in the ingredient name (right-hand field) on each row, save the recipe, then try again.',
+    }
+  }
+
   const existingNames = new Set(existing.map((item) => item.name.toLowerCase()))
 
   const toInsert = ingredients
-    .filter((item) => item.name.trim() && !existingNames.has(item.name.trim().toLowerCase()))
+    .filter((item) => item.name?.trim() && !existingNames.has(item.name.trim().toLowerCase()))
     .map((item) => ({
       meal_id: mealId,
       name: item.name.trim(),
@@ -262,12 +330,23 @@ export async function pullIngredientsToGrocery(mealId, ingredients) {
       is_auto_added: true,
     }))
 
-  if (toInsert.length === 0) return existing
+  if (toInsert.length === 0) {
+    return {
+      items: existing,
+      addedCount: 0,
+      message: 'All recipe ingredients are already on your grocery list.',
+    }
+  }
 
   const { error } = await db().from('grocery_items').insert(toInsert).select()
   if (error) throw error
 
-  return getGroceryItems(mealId)
+  const items = await getGroceryItems(mealId)
+  return {
+    items,
+    addedCount: toInsert.length,
+    message: `Added ${toInsert.length} ingredient${toInsert.length === 1 ? '' : 's'} from recipe.`,
+  }
 }
 
 export async function getMealsWithPhotos(limit = 24) {

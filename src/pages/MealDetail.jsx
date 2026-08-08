@@ -170,7 +170,6 @@ export default function MealDetail() {
         <GrocerySection
           meal={meal}
           groceryItems={groceryItems}
-          recipeIngredients={recipe?.ingredients ?? []}
           onChange={setGroceryItems}
         />
         <PhotoSection

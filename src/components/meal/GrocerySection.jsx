@@ -8,21 +8,54 @@ import {
 } from '../../lib/api'
 import { formatIngredientDisplay } from '../../utils/ingredients'
 
+function GroceryFields({ quantity, description, onQuantityChange, onDescriptionChange, idPrefix }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="w-20 shrink-0">
+        <label htmlFor={`${idPrefix}-qty`} className="label-tag mb-1 block">
+          Qty
+        </label>
+        <input
+          id={`${idPrefix}-qty`}
+          type="text"
+          inputMode="decimal"
+          value={quantity}
+          onChange={(event) => onQuantityChange(event.target.value)}
+          placeholder="2"
+          className="ingredient-input w-full"
+        />
+      </div>
+      <div className="min-w-0 flex-1">
+        <label htmlFor={`${idPrefix}-description`} className="label-tag mb-1 block">
+          Description
+        </label>
+        <input
+          id={`${idPrefix}-description`}
+          type="text"
+          value={description}
+          onChange={(event) => onDescriptionChange(event.target.value)}
+          placeholder="e.g. eggs, olive oil"
+          className="ingredient-input w-full"
+          required
+        />
+      </div>
+    </div>
+  )
+}
+
 function GroceryItemRow({ item, onToggle, onDelete, onUpdate }) {
   const [editing, setEditing] = useState(false)
-  const [name, setName] = useState(item.name)
+  const [description, setDescription] = useState(item.name)
   const [quantity, setQuantity] = useState(item.quantity ?? '')
-  const [note, setNote] = useState(item.note ?? '')
   const [saving, setSaving] = useState(false)
 
   const handleSave = async () => {
-    if (!name.trim()) return
+    if (!description.trim()) return
     setSaving(true)
     try {
       const updated = await updateGroceryItem(item.id, {
-        name: name.trim(),
+        name: description.trim(),
         quantity: quantity.trim() || null,
-        note: note.trim() || null,
       })
       onUpdate(updated)
       setEditing(false)
@@ -34,37 +67,21 @@ function GroceryItemRow({ item, onToggle, onDelete, onUpdate }) {
   }
 
   const handleCancel = () => {
-    setName(item.name)
+    setDescription(item.name)
     setQuantity(item.quantity ?? '')
-    setNote(item.note ?? '')
     setEditing(false)
   }
 
   if (editing) {
     return (
-      <li className="space-y-2 border-b border-separator pb-3">
-        <input
-          type="text"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          className="input-field"
+      <li className="space-y-3 border-b border-separator pb-3">
+        <GroceryFields
+          idPrefix={`edit-${item.id}`}
+          quantity={quantity}
+          description={description}
+          onQuantityChange={setQuantity}
+          onDescriptionChange={setDescription}
         />
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={quantity}
-            onChange={(event) => setQuantity(event.target.value)}
-            placeholder="Qty"
-            className="input-field w-24"
-          />
-          <input
-            type="text"
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            placeholder="Note"
-            className="input-field flex-1"
-          />
-        </div>
         <div className="flex gap-3">
           <button type="button" onClick={handleSave} disabled={saving} className="label-tag text-blue">
             {saving ? 'Saving…' : 'Save'}
@@ -89,7 +106,6 @@ function GroceryItemRow({ item, onToggle, onDelete, onUpdate }) {
         <p className={`text-sm ${item.is_checked ? 'text-disabled line-through' : 'text-body'}`}>
           {formatIngredientDisplay(item)}
         </p>
-        {item.note && <p className="mt-0.5 text-xs text-muted">{item.note}</p>}
         {item.is_auto_added && <p className="label-tag mt-1 text-disabled">From recipe</p>}
       </div>
       <div className="flex gap-2">
@@ -115,26 +131,27 @@ function GroceryItemRow({ item, onToggle, onDelete, onUpdate }) {
 export default function GrocerySection({
   meal,
   groceryItems,
-  recipeIngredients,
   onChange,
 }) {
-  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
   const [quantity, setQuantity] = useState('')
-  const [note, setNote] = useState('')
   const [adding, setAdding] = useState(false)
   const [pulling, setPulling] = useState(false)
+  const [pullMessage, setPullMessage] = useState('')
 
   const handleAdd = async (event) => {
     event.preventDefault()
-    if (!name.trim()) return
+    if (!description.trim()) return
 
     setAdding(true)
     try {
-      await addGroceryItem(meal.id, { name, quantity, note })
+      await addGroceryItem(meal.id, {
+        name: description,
+        quantity,
+      })
       onChange(await getGroceryItems(meal.id))
-      setName('')
+      setDescription('')
       setQuantity('')
-      setNote('')
     } catch (error) {
       console.error(error)
     } finally {
@@ -170,10 +187,14 @@ export default function GrocerySection({
 
   const handlePullIngredients = async () => {
     setPulling(true)
+    setPullMessage('')
     try {
-      onChange(await pullIngredientsToGrocery(meal.id, recipeIngredients))
+      const result = await pullIngredientsToGrocery(meal.id)
+      onChange(result.items)
+      setPullMessage(result.message)
     } catch (error) {
-      console.error(error)
+      console.error('Pull ingredients failed:', error)
+      setPullMessage(error.message || 'Could not pull ingredients from recipe.')
     } finally {
       setPulling(false)
     }
@@ -186,12 +207,14 @@ export default function GrocerySection({
         <button
           type="button"
           onClick={handlePullIngredients}
-          disabled={pulling || recipeIngredients.length === 0}
+          disabled={pulling}
           className="btn-outline w-fit"
         >
           {pulling ? 'Pulling…' : 'Pull ingredients'}
         </button>
       </div>
+
+      {pullMessage && <p className="mb-4 text-xs text-muted">{pullMessage}</p>}
 
       {groceryItems.length === 0 ? (
         <p className="mb-4 text-sm text-disabled">No items yet</p>
@@ -211,31 +234,14 @@ export default function GrocerySection({
 
       <form onSubmit={handleAdd} className="space-y-3 border-t border-hairline pt-4">
         <p className="label-tag">Add item</p>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <input
-            type="text"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="Item name"
-            className="input-field flex-1"
-            required
-          />
-          <input
-            type="text"
-            value={quantity}
-            onChange={(event) => setQuantity(event.target.value)}
-            placeholder="Qty"
-            className="input-field sm:w-24"
-          />
-        </div>
-        <input
-          type="text"
-          value={note}
-          onChange={(event) => setNote(event.target.value)}
-          placeholder="Note (optional)"
-          className="input-field"
+        <GroceryFields
+          idPrefix="add"
+          quantity={quantity}
+          description={description}
+          onQuantityChange={setQuantity}
+          onDescriptionChange={setDescription}
         />
-        <button type="submit" disabled={adding} className="btn-outline">
+        <button type="submit" disabled={adding || !description.trim()} className="btn-outline">
           {adding ? 'Adding…' : 'Add item'}
         </button>
       </form>
