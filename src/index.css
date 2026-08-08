@@ -1,0 +1,63 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=DM+Sans:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-midnight: #12101e;
+  --color-purple: #b7aef0;
+  --color-purple-fill: #a8a0e8;
+  --color-blue: #5fa8e8;
+  --color-heading: #edeafa;
+  --color-body: #c9c5dd;
+  --color-muted: #736d96;
+  --color-disabled: #5c5680;
+  --color-hairline: #2a2640;
+  --color-separator: #211d34;
+  --color-badge-outline: #3d3760;
+  --color-danger: #c96b6b;
+  --color-input-bg: #1a1729;
+
+  --font-heading: "Cormorant Garamond", Georgia, serif;
+  --font-sans: "DM Sans", system-ui, sans-serif;
+}
+
+body {
+  @apply bg-midnight font-sans text-body antialiased;
+}
+
+.font-heading {
+  font-family: var(--font-heading);
+}
+
+.label-tag {
+  @apply text-[10px] font-medium uppercase tracking-[0.08em] text-muted;
+}
+
+.btn-outline {
+  @apply inline-flex items-center justify-center rounded-[2px] border border-blue bg-transparent px-4 py-2 text-[10px] font-medium uppercase tracking-[0.08em] text-blue transition-colors hover:border-blue/70 hover:text-blue/70 disabled:cursor-not-allowed disabled:opacity-40;
+}
+
+.btn-danger {
+  @apply inline-flex items-center justify-center rounded-[2px] border border-danger bg-transparent px-4 py-2 text-[10px] font-medium uppercase tracking-[0.08em] text-danger transition-colors hover:border-danger/70 hover:text-danger/70 disabled:cursor-not-allowed disabled:opacity-40;
+}
+
+.input-field {
+  @apply w-full rounded-[2px] border border-badge-outline bg-transparent px-3 py-2 text-sm text-body placeholder:text-disabled focus:border-blue focus:outline-none;
+}
+
+.textarea-field {
+  @apply w-full min-h-[120px] resize-y rounded-[2px] border border-badge-outline bg-transparent px-3 py-2 text-sm text-body placeholder:text-disabled focus:border-blue focus:outline-none;
+}
+
+.section-divider {
+  @apply border-b border-separator;
+}
+
+.ingredient-input {
+  @apply rounded border border-hairline bg-input-bg px-2 py-2 text-sm text-heading placeholder:text-disabled focus:border-blue focus:outline-none;
+  border-radius: 4px;
+}
+
+.ingredient-select {
+  @apply rounded border border-hairline bg-input-bg px-2 py-2 text-sm text-body focus:border-blue focus:outline-none;
+  border-radius: 4px;
+}
